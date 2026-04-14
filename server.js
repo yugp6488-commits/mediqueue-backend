@@ -32,7 +32,7 @@ app.use(cors({
     "http://localhost:3001",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:3001",
-    "https://medicore-three-gamma.vercel.app",
+    "hmedicore-eg7u87sqw-yugp6488-4479s-projects.vercel.app",
     /https:\/\/medicore-.*\.vercel\.app$/,
   ],
   credentials: true,
