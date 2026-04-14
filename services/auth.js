@@ -6,14 +6,24 @@ import crypto from "crypto";
 import nodemailer from "nodemailer";
 import OTP from "../models/OTP.js";
 
-// ── Email Configuration ─────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+//  In services/auth.js
+// ─────────────────────────────────────────────────────────────
 
 const transporter = nodemailer.createTransport({
-  service: process.env.EMAIL_SERVICE || "gmail",
+  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true,
   auth: {
     user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD,
+    pass: process.env.EMAIL_PASS, // Make sure this is an App Password!
   },
+  // ADD THIS BLOCK BELOW
+  family: 4, 
+  tls: {
+    rejectUnauthorized: false
+  }
 });
 
 // Test email connection on startup
