@@ -7,19 +7,19 @@ import nodemailer from "nodemailer";
 import OTP from "../models/OTP.js";
 
 // ─────────────────────────────────────────────────────────────
-//  In services/auth.js
+//  email configuration
 // ─────────────────────────────────────────────────────────────
 
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  host: 'smtp.gmail.com',
+  host: "smtp.gmail.com",
   port: 465,
   secure: true,
+  service: 'gmail',
   auth: {
     user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS, // Make sure this is an App Password!
+    pass: process.env.EMAIL_PASS, // Make sure this matches your Render key!
   },
-  // ADD THIS BLOCK BELOW
+  // THESE TWO LINES ARE CRITICAL FOR RENDER
   family: 4, 
   tls: {
     rejectUnauthorized: false
