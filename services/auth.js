@@ -11,19 +11,15 @@ import OTP from "../models/OTP.js";
 // ─────────────────────────────────────────────────────────────
 
 const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
+  service: 'gmail',
+  host: 'smtp.gmail.com',
   port: 465,
   secure: true,
-  service: 'gmail',
   auth: {
     user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS, // Make sure this matches your Render key!
+    pass: process.env.EMAIL_PASS, // Updated to match Render
   },
-  // THESE TWO LINES ARE CRITICAL FOR RENDER
-  family: 4, 
-  tls: {
-    rejectUnauthorized: false
-  }
+  family: 4 // Critical for Render's network
 });
 
 // Test email connection on startup
@@ -53,7 +49,7 @@ function generateOTP() {
  * Send OTP via email using Nodemailer
  */
 async function sendOTPEmail(email, code) {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
     console.warn(`📧 [STUB] OTP for ${email}: ${code}`);
     console.warn("⚠️  Email not configured. Set EMAIL_USER and EMAIL_PASSWORD in .env");
     return true; // Allow testing without email
