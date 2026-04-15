@@ -7,31 +7,12 @@ import nodemailer from "nodemailer";
 import OTP from "../models/OTP.js";
 
 // ─────────────────────────────────────────────────────────────
-//  email configuration
+// ─────────────────────────────────────────────────────────────
+//  email configuration (Brevo REST API)
 // ─────────────────────────────────────────────────────────────
 
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS, // Updated to match Render
-  },
-  family: 4, // Critical for Render's network
-  connectionTimeout: 5000, // 5 seconds timeout before failing fast
-  socketTimeout: 5000
-});
-
-// Test email connection on startup without crashing
-transporter.verify((error, success) => {
-  if (error) {
-    console.warn("⚠️  Email service failed to connect (likely blocked by Render Free Tier):", error.message);
-  } else {
-    console.log("✅ Email service ready (Nodemailer)");
-  }
-});
+// We no longer use Nodemailer because Render's Free Tier blocks SMTP ports.
+// Instead, we use Brevo's HTTP API (port 443) which is completely unblocked.
 
 // ── Helpers ─────────────────────────────────────────────────
 
@@ -47,75 +28,93 @@ function generateOTP() {
 }
 
 /**
- * Send OTP via email using Nodemailer
+ * Send OTP via email using Brevo HTTP API
  */
 async function sendOTPEmail(email, code) {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+  const brevoApiKey = process.env.BREVO_API_KEY;
+  
+  if (!brevoApiKey) {
     console.warn(`📧 [STUB] OTP for ${email}: ${code}`);
-    console.warn("⚠️  Email not configured. Set EMAIL_USER and EMAIL_PASSWORD in .env");
+    console.warn("⚠️  Email not configured. Set BREVO_API_KEY in .env");
     return true; // Allow testing without email
   }
 
-  try {
-    const mailOptions = {
-      from: `${process.env.EMAIL_FROM_NAME || "MediCore"} <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: "MediCore - Your OTP Verification Code",
-      html: `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <style>
-              body { font-family: Arial, sans-serif; background-color: #f5f5f5; }
-              .container { max-width: 600px; margin: 0 auto; background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-              .header { text-align: center; margin-bottom: 30px; }
-              .logo { font-size: 32px; margin-bottom: 10px; }
-              .title { color: #333; font-size: 24px; font-weight: bold; }
-              .message { color: #666; margin: 20px 0; font-size: 14px; }
-              .otp-box { background-color: #f0f8ff; border: 2px dashed #4a90e2; padding: 20px; text-align: center; margin: 30px 0; border-radius: 8px; }
-              .otp-code { font-size: 48px; font-weight: bold; color: #4a90e2; letter-spacing: 8px; font-family: monospace; }
-              .expiry { color: #e74c3c; font-weight: bold; margin-top: 15px; }
-              .footer { color: #999; font-size: 12px; margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px; text-align: center; }
-            </style>
-          </head>
-          <body>
-            <div class="container">
-              <div class="header">
-                <div class="logo">⚕️</div>
-                <div class="title">MediCore</div>
-              </div>
-              
-              <h2 style="color: #333;">Verify Your Identity</h2>
-              <p class="message">Hi there,</p>
-              <p class="message">You requested a one-time password (OTP) to access your MediCore account. Use the code below to complete your login:</p>
-              
-              <div class="otp-box">
-                <div class="otp-code">${code}</div>
-                <div class="expiry">⏱️ This code expires in 10 minutes</div>
-              </div>
-              
-              <p class="message" style="color: #e74c3c; font-weight: bold;">⚠️ For security:</p>
-              <ul class="message" style="color: #666;">
-                <li>Never share this code with anyone</li>
-                <li>MediCore staff will never ask for your OTP</li>
-                <li>If you didn't request this, please ignore this email</li>
-              </ul>
-              
-              <div class="footer">
-                <p>This is an automated message from MediCore Hospital Management System</p>
-                <p>&copy; 2026 MediCore. All rights reserved.</p>
-              </div>
-            </div>
-          </body>
-        </html>
-      `,
-    };
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; background-color: #f5f5f5; }
+          .container { max-width: 600px; margin: 0 auto; background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+          .header { text-align: center; margin-bottom: 30px; }
+          .logo { font-size: 32px; margin-bottom: 10px; }
+          .title { color: #333; font-size: 24px; font-weight: bold; }
+          .message { color: #666; margin: 20px 0; font-size: 14px; }
+          .otp-box { background-color: #f0f8ff; border: 2px dashed #4a90e2; padding: 20px; text-align: center; margin: 30px 0; border-radius: 8px; }
+          .otp-code { font-size: 48px; font-weight: bold; color: #4a90e2; letter-spacing: 8px; font-family: monospace; }
+          .expiry { color: #e74c3c; font-weight: bold; margin-top: 15px; }
+          .footer { color: #999; font-size: 12px; margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px; text-align: center; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <div class="logo">⚕️</div>
+            <div class="title">MediCore</div>
+          </div>
+          
+          <h2 style="color: #333;">Verify Your Identity</h2>
+          <p class="message">Hi there,</p>
+          <p class="message">You requested a one-time password (OTP) to access your MediCore account. Use the code below to complete your login:</p>
+          
+          <div class="otp-box">
+            <div class="otp-code">${code}</div>
+            <div class="expiry">⏱️ This code expires in 10 minutes</div>
+          </div>
+          
+          <p class="message" style="color: #e74c3c; font-weight: bold;">⚠️ For security:</p>
+          <ul class="message" style="color: #666;">
+            <li>Never share this code with anyone</li>
+            <li>MediCore staff will never ask for your OTP</li>
+            <li>If you didn't request this, please ignore this email</li>
+          </ul>
+          
+          <div class="footer">
+            <p>This is an automated message from MediCore Hospital Management System</p>
+            <p>&copy; 2026 MediCore. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`✅ OTP email sent to ${email} (${info.messageId})`);
+  try {
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "api-key": brevoApiKey,
+      },
+      body: JSON.stringify({
+        sender: {
+          name: process.env.EMAIL_FROM_NAME || "MediCore",
+          email: process.env.EMAIL_USER || "noreply@medicore.app",
+        },
+        to: [{ email }],
+        subject: "MediCore - Your OTP Verification Code",
+        htmlContent,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Brevo API Error: ${response.status} ${errorText}`);
+    }
+
+    console.log(`✅ OTP email officially sent via Brevo HTTP API to ${email}`);
     return true;
   } catch (error) {
-    console.error(`❌ Failed to send OTP email to ${email}:`, error.message);
+    console.error(`❌ Failed to send Brevo OTP email to ${email}:`, error.message);
     throw new Error(`Failed to send OTP: ${error.message}`);
   }
 }
