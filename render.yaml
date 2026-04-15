@@ -2,6 +2,7 @@ services:
   - type: web
     name: medicore-backend
     env: node
+    plan: free
     rootDir: .
     buildCommand: npm install
     startCommand: node server.js
