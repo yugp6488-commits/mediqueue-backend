@@ -98,7 +98,7 @@ async function sendOTPEmail(email, code) {
       body: JSON.stringify({
         sender: {
           name: process.env.EMAIL_FROM_NAME || "MediCore",
-          email: process.env.EMAIL_USER || "noreply@medicore.app",
+          email: process.env.EMAIL_USER || "yug.p6488@gmail.com",
         },
         to: [{ email }],
         subject: "MediCore - Your OTP Verification Code",
