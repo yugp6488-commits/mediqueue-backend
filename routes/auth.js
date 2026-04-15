@@ -62,4 +62,15 @@ router.get("/otp-status/:email", async (req, res) => {
   }
 });
 
+// ── Check API Keys ────────────────────────────────────────
+
+router.get("/diagnostic", (req, res) => {
+  res.json({
+    status: "ok",
+    environment: process.env.NODE_ENV,
+    hasBrevoKey: !!process.env.BREVO_API_KEY,
+    fallbackEmail: process.env.EMAIL_USER || "yug.p6488@gmail.com",
+  });
+});
+
 export default router;
