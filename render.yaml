@@ -6,18 +6,23 @@ services:
     rootDir: .
     buildCommand: npm install
     startCommand: node server.js
+    healthCheckPath: /api/health
     envVars:
       - key: PORT
         value: 10000
+      - key: NODE_ENV
+        value: production
       - key: MONGODB_URI
         sync: false
       - key: FRONTEND_URL
-        sync: false
-      - key: EMAIL_USER
-        sync: false
-      - key: EMAIL_PASS
         sync: false
       - key: GEMINI_API_KEY
         sync: false
       - key: BREVO_API_KEY
         sync: false
+      - key: EMAIL_SERVICE
+        value: brevo
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_FROM_NAME
+        value: MediCore OTP

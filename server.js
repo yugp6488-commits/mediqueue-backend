@@ -44,7 +44,10 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps, curl, or Postman)
     if (!origin) return callback(null, true);
 
-    if (allowedOrigins.indexOf(origin) !== -1 || /^https:\/\/medicore-.*\.vercel\.app$/.test(origin)) {
+    if (
+      allowedOrigins.indexOf(origin) !== -1 ||
+      /^https:\/\/[\w.-]+\.vercel\.app$/.test(origin)
+    ) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
