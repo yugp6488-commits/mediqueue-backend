@@ -21,29 +21,49 @@ const BREVO_KEY_ENV_NAMES = [
 ];
 
 /**
+ * Strip curly quotes / straight quotes accidentally pasted around the key.
+ */
+function stripWrappingQuotes(s) {
+  let v = s.trim();
+  const pairs = [
+    ['"', '"'],
+    ["'", "'"],
+    ["\u201c", "\u201d"], // ""
+    ["\u2018", "\u2019"], // ''
+  ];
+  for (const [a, b] of pairs) {
+    if (v.startsWith(a) && v.endsWith(b) && v.length >= 2) {
+      v = v.slice(1, -1).trim();
+      break;
+    }
+  }
+  return v.replace(/\u00a0/g, " ").trim();
+}
+
+/**
  * Brevo's UI occasionally copies a Base64 blob like:
  * {"api_key":"xkeysib-..."} encoded — the HTTP API expects the raw `xkeysib-...` string.
  */
 function normalizeBrevoKeyValue(raw) {
   if (typeof raw !== "string") return "";
-  let v = raw.trim().replace(/^\uFEFF/, "");
+  let v = raw.trim().replace(/^\uFEFF/, "").replace(/\u00a0/g, " ");
   if (!v) return "";
   const compact = v.replace(/\s/g, "");
-  if (compact.length < 20) return v;
-  if (!/^[A-Za-z0-9+/=_-]+$/.test(compact)) return v;
+  if (compact.length < 20) return stripWrappingQuotes(v);
+  if (!/^[A-Za-z0-9+/=_-]+$/.test(compact)) return stripWrappingQuotes(v);
   try {
     const decoded = Buffer.from(compact, "base64").toString("utf8");
     if (decoded.startsWith("{") && decoded.includes("api_key")) {
       const j = JSON.parse(decoded);
       const inner = j?.api_key;
       if (typeof inner === "string" && inner.trim()) {
-        return inner.trim();
+        return stripWrappingQuotes(inner.trim());
       }
     }
   } catch {
     /* use literal */
   }
-  return v;
+  return stripWrappingQuotes(v);
 }
 
 /**
@@ -62,6 +82,27 @@ function getBrevoApiKeyFromEnv() {
 /** True when any supported key name has a non-empty value. */
 export function hasBrevoCredentials() {
   return getBrevoApiKeyFromEnv().length > 0;
+}
+
+/** Non-secret hints for diagnosing 401 / wrong key type (Render dashboard). */
+export function brevoKeyDiagnosticHints() {
+  const k = getBrevoApiKeyFromEnv();
+  if (!k) {
+    return {
+      key_resolved: false,
+      looks_like_transactional_api_key: false,
+      hint: "No key found in env. Set BREVO_API_KEY on Render.",
+    };
+  }
+  const looksTransactional = /^xkeysib-/i.test(k);
+  return {
+    key_resolved: true,
+    key_character_length: k.length,
+    looks_like_transactional_api_key: looksTransactional,
+    hint: looksTransactional
+      ? "Prefix xkeysib- OK. If Brevo still returns 401, the key may be revoked, copied wrong, or from another Brevo account — generate a NEW API key."
+      : "Token does NOT start with xkeysib-. Brevo's REST transactional key usually does. Generate a NEW key at app.brevo.com → SMTP & API → Create new API key, paste FULL value into Render (no quotes/spaces).",
+  };
 }
 
 /** Safe for /diagnostic — which variable names Render actually set (not values). */
@@ -201,9 +242,19 @@ async function sendOTPEmail(email, code) {
       } catch {
         /* keep raw */
       }
+
+      if (response.status === 401) {
+        throw new Error(
+          `Brevo rejected your API key (401: ${detail}). This is NOT a sender-email problem yet. ` +
+            `Create a brand-new key: Brevo → Settings → SMTP & API → API keys → Generate new API key (copy once). ` +
+            `In Render set BREVO_API_KEY to that full value (no quotes, no Base64 wrapper). Redeploy. ` +
+            `GET /api/auth/diagnostic → check looks_like_transactional_api_key is true.`,
+        );
+      }
+
       throw new Error(
         `Brevo could not send email (${response.status}). ${detail}. ` +
-          `Ensure BREVO_API_KEY is valid and sender ${senderEmail} is verified in Brevo.`,
+          `If forbidden / sender invalid, verify sender ${senderEmail} in Brevo (Senders & domains).`,
       );
     }
 

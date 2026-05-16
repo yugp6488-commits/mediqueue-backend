@@ -9,6 +9,7 @@ import {
   checkOTPStatus,
   hasBrevoCredentials,
   brevoEnvKeyPresence,
+  brevoKeyDiagnosticHints,
 } from "../services/auth.js";
 
 const router = Router();
@@ -81,6 +82,7 @@ router.get("/diagnostic", (req, res) => {
     status: "ok",
     environment: nodeEnv,
     hasBrevoKey: hasBrevoCredentials(),
+    brevo_key_hints: brevoKeyDiagnosticHints(),
     brevo_key_env_presence: brevoEnvKeyPresence(),
     senderEmailConfigured: !!(
       process.env.BREVO_SENDER_EMAIL?.trim() || process.env.EMAIL_USER?.trim()
