@@ -21,13 +21,39 @@ const BREVO_KEY_ENV_NAMES = [
 ];
 
 /**
+ * Brevo's UI occasionally copies a Base64 blob like:
+ * {"api_key":"xkeysib-..."} encoded — the HTTP API expects the raw `xkeysib-...` string.
+ */
+function normalizeBrevoKeyValue(raw) {
+  if (typeof raw !== "string") return "";
+  let v = raw.trim().replace(/^\uFEFF/, "");
+  if (!v) return "";
+  const compact = v.replace(/\s/g, "");
+  if (compact.length < 20) return v;
+  if (!/^[A-Za-z0-9+/=_-]+$/.test(compact)) return v;
+  try {
+    const decoded = Buffer.from(compact, "base64").toString("utf8");
+    if (decoded.startsWith("{") && decoded.includes("api_key")) {
+      const j = JSON.parse(decoded);
+      const inner = j?.api_key;
+      if (typeof inner === "string" && inner.trim()) {
+        return inner.trim();
+      }
+    }
+  } catch {
+    /* use literal */
+  }
+  return v;
+}
+
+/**
  * Prefer first non-empty value among known env names.
  */
 function getBrevoApiKeyFromEnv() {
   for (const name of BREVO_KEY_ENV_NAMES) {
     const raw = process.env[name];
     if (typeof raw !== "string") continue;
-    const v = raw.trim().replace(/^\uFEFF/, "");
+    const v = normalizeBrevoKeyValue(raw);
     if (v.length > 0) return v;
   }
   return "";
@@ -43,7 +69,8 @@ export function brevoEnvKeyPresence() {
   return Object.fromEntries(
     BREVO_KEY_ENV_NAMES.map((n) => {
       const raw = process.env[n];
-      const ok = typeof raw === "string" && raw.trim().length > 0;
+      const ok =
+        typeof raw === "string" && normalizeBrevoKeyValue(raw).length > 0;
       return [n, ok];
     }),
   );
