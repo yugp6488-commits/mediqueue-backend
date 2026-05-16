@@ -24,5 +24,7 @@ services:
         value: brevo
       - key: EMAIL_USER
         sync: false
+      - key: BREVO_SENDER_EMAIL
+        sync: false
       - key: EMAIL_FROM_NAME
         value: MediCore OTP

@@ -3,7 +3,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { Router } from "express";
-import { sendOTP, verifyOTP } from "../services/auth.js";
+import { sendOTP, verifyOTP, checkOTPStatus } from "../services/auth.js";
 
 const router = Router();
 
@@ -20,8 +20,10 @@ router.post("/send-otp", async (req, res) => {
     const result = await sendOTP(email.trim().toLowerCase());
     res.status(200).json({
       success: true,
-      message: `OTP sent to ${email}`,
+      email_sent: result.email_sent !== false,
+      message: result.message || `OTP sent to ${email}`,
       expires_in_minutes: 10,
+      ...(result.dev_hint && { dev_hint: result.dev_hint }),
     });
   } catch (e) {
     res.status(500).json({ error: e.message || "Failed to send OTP" });
@@ -68,8 +70,10 @@ router.get("/diagnostic", (req, res) => {
   res.json({
     status: "ok",
     environment: process.env.NODE_ENV,
-    hasBrevoKey: !!process.env.BREVO_API_KEY,
-    fallbackEmail: process.env.EMAIL_USER || "yug.p6488@gmail.com",
+    hasBrevoKey: !!process.env.BREVO_API_KEY?.trim(),
+    senderEmailConfigured: !!(
+      process.env.BREVO_SENDER_EMAIL?.trim() || process.env.EMAIL_USER?.trim()
+    ),
   });
 });
 

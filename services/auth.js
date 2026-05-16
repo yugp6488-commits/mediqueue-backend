@@ -3,7 +3,6 @@
 // ─────────────────────────────────────────────────────────────
 
 import crypto from "crypto";
-import nodemailer from "nodemailer";
 import OTP from "../models/OTP.js";
 
 // ─────────────────────────────────────────────────────────────
@@ -28,17 +27,35 @@ function generateOTP() {
 }
 
 /**
- * Send OTP via email using Brevo HTTP API
+ * Resolved sender email for Brevo (must be a verified sender in Brevo).
+ */
+function brevoSenderEmail() {
+  return (
+    process.env.BREVO_SENDER_EMAIL?.trim() ||
+    process.env.EMAIL_USER?.trim() ||
+    "yug.p6488@gmail.com"
+  );
+}
+
+/**
+ * Send OTP via email using Brevo HTTP API.
+ * @returns `{ delivered: boolean }` — `delivered` is false only in development when API key is missing (OTP logged to console).
  */
 async function sendOTPEmail(email, code) {
-  const brevoApiKey = process.env.BREVO_API_KEY;
-  
+  const brevoApiKey = process.env.BREVO_API_KEY?.trim();
+
   if (!brevoApiKey) {
-    console.warn(`📧 [STUB] OTP for ${email}: ${code}`);
-    console.warn("⚠️  Email not configured. Set BREVO_API_KEY in .env");
-    return true; // Allow testing without email
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "Email is not configured on the server (missing BREVO_API_KEY). Add it in Render environment variables.",
+      );
+    }
+    console.warn(`\n📧 [DEV — no BREVO_API_KEY] OTP for ${email}: ${code}\n`);
+    console.warn("⚠️  Set BREVO_API_KEY to send real email. Until then, use the code above to verify.\n");
+    return { delivered: false };
   }
 
+  const senderEmail = brevoSenderEmail();
   const htmlContent = `
     <!DOCTYPE html>
     <html>
@@ -98,7 +115,7 @@ async function sendOTPEmail(email, code) {
       body: JSON.stringify({
         sender: {
           name: process.env.EMAIL_FROM_NAME || "MediCore",
-          email: process.env.EMAIL_USER || "yug.p6488@gmail.com",
+          email: senderEmail,
         },
         to: [{ email }],
         subject: "MediCore - Your OTP Verification Code",
@@ -108,14 +125,24 @@ async function sendOTPEmail(email, code) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Brevo API Error: ${response.status} ${errorText}`);
+      let detail = errorText;
+      try {
+        const j = JSON.parse(errorText);
+        detail = j.message || j.error || errorText;
+      } catch {
+        /* keep raw */
+      }
+      throw new Error(
+        `Brevo could not send email (${response.status}). ${detail}. ` +
+          `Ensure BREVO_API_KEY is valid and sender ${senderEmail} is verified in Brevo.`,
+      );
     }
 
-    console.log(`✅ OTP email officially sent via Brevo HTTP API to ${email}`);
-    return true;
+    console.log(`✅ OTP email sent via Brevo to ${email}`);
+    return { delivered: true };
   } catch (error) {
     console.error(`❌ Failed to send Brevo OTP email to ${email}:`, error.message);
-    throw new Error(`Failed to send OTP: ${error.message}`);
+    throw error instanceof Error ? error : new Error(String(error));
   }
 }
 
@@ -124,15 +151,12 @@ async function sendOTPEmail(email, code) {
  */
 export async function sendOTP(email) {
   try {
-    // Delete any existing OTP for this email
     await OTP.deleteMany({ email });
 
-    // Generate new OTP
     const code = generateOTP();
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + 10 * 60 * 1000); // 10 minutes
+    const expiresAt = new Date(now.getTime() + 10 * 60 * 1000);
 
-    // Save OTP to database
     const otpRecord = await OTP.create({
       _id: uuid(),
       email,
@@ -142,22 +166,38 @@ export async function sendOTP(email) {
       verified: false,
     });
 
-    // Send OTP email but do not fatally crash if it fails
     try {
-      await sendOTPEmail(email, code);
-      console.log(`✅ OTP sent to ${email} (expires at ${expiresAt})`);
+      const { delivered } = await sendOTPEmail(email, code);
+      if (delivered) {
+        console.log(`✅ OTP delivered to ${email} (expires at ${expiresAt})`);
+        return {
+          success: true,
+          email_sent: true,
+          message: `We sent a 6-digit code to ${email}`,
+          email,
+          expires_at: expiresAt,
+        };
+      }
+      console.log(`⚠️  OTP saved for ${email} but email not sent (dev / no provider)`);
+      return {
+        success: true,
+        email_sent: false,
+        message: `Code ready (development). Email was not sent — check the server terminal for your OTP.`,
+        dev_hint:
+          process.env.NODE_ENV !== "production"
+            ? `Your OTP was printed in the backend console (BREVO_API_KEY not set).`
+            : undefined,
+        email,
+        expires_at: expiresAt,
+      };
     } catch (emailErr) {
-      console.warn(`⚠️  Email failed to send (probably Render port blocking), but OTP is saved!`);
-      // We do not throw here! This allows the user to still use master OTP 123123
+      await OTP.deleteOne({ _id: otpRecord._id }).catch(() => {});
+      console.error("OTP rolled back — email delivery failed:", emailErr.message);
+      throw emailErr;
     }
-
-    return {
-      success: true,
-      email,
-      expires_at: expiresAt,
-    };
   } catch (error) {
     console.error("❌ Error generating OTP:", error);
+    if (error instanceof Error) throw error;
     throw new Error("Failed to process OTP. Please try again.");
   }
 }
@@ -188,8 +228,10 @@ export async function verifyOTP(email, code) {
       );
     }
 
-    // Verify code
-    if (code !== "123123" && otpRecord.code !== code) {
+    const allowMaster =
+      process.env.ALLOW_MASTER_OTP === "true" && code === "123123";
+
+    if (!allowMaster && otpRecord.code !== code) {
       otpRecord.attempts += 1;
       await otpRecord.save();
       const remaining = otpRecord.max_attempts - otpRecord.attempts;
