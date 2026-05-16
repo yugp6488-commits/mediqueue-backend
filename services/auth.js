@@ -13,6 +13,42 @@ import OTP from "../models/OTP.js";
 // We no longer use Nodemailer because Render's Free Tier blocks SMTP ports.
 // Instead, we use Brevo's HTTP API (port 443) which is completely unblocked.
 
+/** Accept these env names so typos still work on Render dashboards. */
+const BREVO_KEY_ENV_NAMES = [
+  "BREVO_API_KEY",
+  "BRAVO_API_KEY", // common typo (Bravo vs Brevo)
+  "SENDINBLUE_API_KEY", // legacy Brevo (Sendinblue) name
+];
+
+/**
+ * Prefer first non-empty value among known env names.
+ */
+function getBrevoApiKeyFromEnv() {
+  for (const name of BREVO_KEY_ENV_NAMES) {
+    const raw = process.env[name];
+    if (typeof raw !== "string") continue;
+    const v = raw.trim().replace(/^\uFEFF/, "");
+    if (v.length > 0) return v;
+  }
+  return "";
+}
+
+/** True when any supported key name has a non-empty value. */
+export function hasBrevoCredentials() {
+  return getBrevoApiKeyFromEnv().length > 0;
+}
+
+/** Safe for /diagnostic — which variable names Render actually set (not values). */
+export function brevoEnvKeyPresence() {
+  return Object.fromEntries(
+    BREVO_KEY_ENV_NAMES.map((n) => {
+      const raw = process.env[n];
+      const ok = typeof raw === "string" && raw.trim().length > 0;
+      return [n, ok];
+    }),
+  );
+}
+
 // ── Helpers ─────────────────────────────────────────────────
 
 function uuid() {
@@ -42,16 +78,22 @@ function brevoSenderEmail() {
  * @returns `{ delivered: boolean }` — `delivered` is false only in development when API key is missing (OTP logged to console).
  */
 async function sendOTPEmail(email, code) {
-  const brevoApiKey = process.env.BREVO_API_KEY?.trim();
+  const brevoApiKey = getBrevoApiKeyFromEnv();
 
   if (!brevoApiKey) {
     if (process.env.NODE_ENV === "production") {
       throw new Error(
-        "Email is not configured on the server (missing BREVO_API_KEY). Add it in Render environment variables.",
+        "Email is not configured on the server. Set a non-empty BREVO_API_KEY in Render Environment " +
+          "(common mistake: naming it BRAVO_API_KEY — use BREVO_API_KEY, or we also read BRAVO_API_KEY / SENDINBLUE_API_KEY). " +
+          "After saving, redeploy. Then GET /api/auth/diagnostic shows which keys are detected.",
       );
     }
-    console.warn(`\n📧 [DEV — no BREVO_API_KEY] OTP for ${email}: ${code}\n`);
-    console.warn("⚠️  Set BREVO_API_KEY to send real email. Until then, use the code above to verify.\n");
+    console.warn(`📧 [DEV] OTP for ${email}: ${code}`);
+    console.warn(
+      `\n⚠️  Development: no Brevo key in env. Checked: ${BREVO_KEY_ENV_NAMES.join(", ")}\n`,
+    );
+    console.warn("   Set one of those to send email. Until then, use the OTP above to verify.\n");
+
     return { delivered: false };
   }
 
@@ -185,7 +227,7 @@ export async function sendOTP(email) {
         message: `Code ready (development). Email was not sent — check the server terminal for your OTP.`,
         dev_hint:
           process.env.NODE_ENV !== "production"
-            ? `Your OTP was printed in the backend console (BREVO_API_KEY not set).`
+            ? `Your OTP was printed in the backend console (no Brevo transactional key in env).`
             : undefined,
         email,
         expires_at: expiresAt,

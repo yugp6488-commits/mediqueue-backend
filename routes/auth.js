@@ -3,7 +3,13 @@
 // ─────────────────────────────────────────────────────────────
 
 import { Router } from "express";
-import { sendOTP, verifyOTP, checkOTPStatus } from "../services/auth.js";
+import {
+  sendOTP,
+  verifyOTP,
+  checkOTPStatus,
+  hasBrevoCredentials,
+  brevoEnvKeyPresence,
+} from "../services/auth.js";
 
 const router = Router();
 
@@ -67,10 +73,15 @@ router.get("/otp-status/:email", async (req, res) => {
 // ── Check API Keys ────────────────────────────────────────
 
 router.get("/diagnostic", (req, res) => {
+  const nodeEnv =
+    typeof process.env.NODE_ENV === "string" && process.env.NODE_ENV.trim()
+      ? process.env.NODE_ENV.trim()
+      : "(unset)";
   res.json({
     status: "ok",
-    environment: process.env.NODE_ENV,
-    hasBrevoKey: !!process.env.BREVO_API_KEY?.trim(),
+    environment: nodeEnv,
+    hasBrevoKey: hasBrevoCredentials(),
+    brevo_key_env_presence: brevoEnvKeyPresence(),
     senderEmailConfigured: !!(
       process.env.BREVO_SENDER_EMAIL?.trim() || process.env.EMAIL_USER?.trim()
     ),

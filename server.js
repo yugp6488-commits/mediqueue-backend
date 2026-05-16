@@ -12,6 +12,7 @@ import hospitalRoutes from "./routes/hospital.js";
 import aiRoutes from "./routes/ai.js";
 import uploadRoutes from "./routes/upload.js";
 import authRoutes from "./routes/auth.js";
+import { hasBrevoCredentials } from "./services/auth.js";
 
 // ── Config ──────────────────────────────────────────────────
 const PORT = process.env.PORT || 5001;
@@ -80,6 +81,9 @@ async function start() {
   try {
     await mongoose.connect(MONGODB_URI);
     console.log("✅  Connected to MongoDB Atlas");
+    console.log(
+      `📧 Brevo (OTP mail): ${hasBrevoCredentials() ? "API key detected" : "⚠ MISSING — set BREVO_API_KEY on Render & redeploy"}`,
+    );
 
     app.listen(PORT, () => {
       console.log(`🚀  Server running on http://localhost:${PORT}`);
